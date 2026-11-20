@@ -8,24 +8,29 @@ The keys you see never move. Behind them, every touch is resolved with a Bayesia
 stays reachable. → [How it works (with research references)](docs/ADAPTIVE_TOUCH.md)
 
 <p>
-<img src="docs/screenshots/theme_dark.png" width="32%" alt="Dark theme">
+<img src="docs/screenshots/theme_dark.png" width="32%" alt="Midnight glass theme">
+<img src="docs/screenshots/theme_light.png" width="32%" alt="Daylight glass theme">
 <img src="docs/screenshots/theme_amoled_number_row.png" width="32%" alt="AMOLED theme with number row">
-<img src="docs/screenshots/theme_light.png" width="32%" alt="Light theme">
 </p>
 <p>
-<img src="docs/screenshots/hitmap_after_th.png" width="32%" alt="Hit map after typing th">
+<img src="docs/screenshots/pressed_key.png" width="32%" alt="A key mid-press with its glass preview bubble">
 <img src="docs/screenshots/emoji_panel.png" width="32%" alt="Emoji panel">
-<img src="docs/screenshots/clipboard_panel.png" width="32%" alt="Clipboard panel">
+<img src="docs/screenshots/hitmap_after_th.png" width="32%" alt="Hit map after typing th">
+</p>
+<p>
+<img src="docs/screenshots/settings_dark.png" width="32%" alt="FluidKey app, dark">
+<img src="docs/screenshots/settings_light.png" width="32%" alt="FluidKey app, light">
+<img src="docs/screenshots/theme_sunset.png" width="32%" alt="Sunset glass theme">
 </p>
 
 ## Download
 
-Grab **`FluidKey-v1.0.1.apk`** from [Releases](../../releases/latest) or from
+Grab **`FluidKey-v1.1.0.apk`** from [Releases](../../releases/latest) or from
 [`release/`](release/) in this repo. Then:
 
 1. Open the APK on your phone and allow installs from that source.
-2. Open **FluidKey** → tap **1 · Enable** → switch FluidKey on.
-3. Tap **2 · Select** and pick FluidKey. Use the text box on the same screen to try it.
+2. Open **FluidKey**, tap **Enable** and switch FluidKey on.
+3. Tap **Select** and pick FluidKey. You can also try it in the live preview on the same screen.
 
 Requires Android 8.0+ (API 26).
 
@@ -34,8 +39,18 @@ Requires Android 8.0+ (API 26).
 - **Adaptive hit targets.** Likely next letters grow into their neighbours' edges and unlikely
   ones shrink, while the visible keyboard stays the same. Adjustable strength, a debug hit-map
   overlay, and on-device learning of your personal aim and vocabulary.
-- **Themes.** Follow system, AMOLED black, Light, Dark, Material You (wallpaper colours), Ocean,
-  Forest, Sunset, Lavender, Rose. Optional borderless keys.
+- **Frosted-glass design.**
+  - Translucent keys with an inner sheen, light hairline edges and soft shadows, over an aurora
+    backdrop.
+  - Keys sink, brighten and spring back when pressed.
+  - Glass preview bubbles, and a sliding accent pill in long-press popups.
+  - Glass toolbar chips, animated panels, and a glass emoji bar with a sliding indicator.
+- **Themes.** Auto, Auto AMOLED, Material You (wallpaper colours), Daylight, Midnight, AMOLED
+  (pure black), Ocean, Forest, Sunset, Lavender, Rose. Optional borderless keys.
+- **A modern app.**
+  - Jetpack Compose and Material 3, with guided setup.
+  - A **live preview keyboard** you can type on, which reflects every setting instantly.
+  - A visual theme carousel and grouped glass settings cards.
 - **Keyboard size.** Height from 75% to 130%, plus a one-handed mode (left or right).
 - **Number row** toggle.
 - **Long-press symbols** with an adjustable delay (100–800 ms). Hints show on each key and accents

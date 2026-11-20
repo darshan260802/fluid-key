@@ -1,12 +1,28 @@
-## FluidKey v1.0.1
+## FluidKey v1.1.0: frosted glass
 
-**Fix:** the keyboard no longer stretches to full screen height on real devices. The popup layer was claiming all the height the IME window allowed.
+**A full visual redesign of the keyboard and the app.**
+
+- **Frosted-glass keys:**
+  - Translucent caps with an inner sheen, light hairline edges and soft shadows, over an aurora
+    backdrop.
+  - Pressed keys sink, brighten and spring back.
+  - Glass preview bubbles, and an animated selection pill in long-press popups.
+- **Glass toolbar and panels:** the active panel's chip is highlighted, panels fade and slide in,
+  the emoji bar has a sliding category indicator, and clipboard items are a card grid.
+- **Re-tuned themes:** Midnight, Daylight, AMOLED (still pure black), Ocean, Forest, Sunset,
+  Lavender, Rose, plus Material You.
+- **A new app** (Jetpack Compose, Material 3):
+  - guided setup;
+  - a **live preview keyboard** you can type on, which reflects your settings instantly;
+  - a visual theme carousel;
+  - grouped settings cards.
+- Your existing settings carry over, and the update installs over v1.0.x.
 
 ---
 
 The first release of FluidKey: an Android keyboard with **iOS-style adaptive hit targets**. It predicts the next letter and quietly enlarges that letter's touch area, and anchored key cores keep every key reachable.
 
-**Install:** download `FluidKey-v1.0.1.apk`, open it on your phone, then open FluidKey and follow **1 · Enable** → **2 · Select**. Requires Android 8.0+.
+**Install:** download `FluidKey-v1.1.0.apk`, open it on your phone, then open FluidKey and tap **Enable**, then **Select**. Requires Android 8.0+.
 
 ### Highlights
 - Adaptive hit targets: a Bayesian spatial and language model with anchored targets, on-device learning of your aim, adjustable strength, and a hit-map debug view

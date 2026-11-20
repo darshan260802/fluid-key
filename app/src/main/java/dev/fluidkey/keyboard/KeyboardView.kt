@@ -6,6 +6,13 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Typeface
+import android.animation.ValueAnimator
+import android.os.Build
+import android.view.animation.AnimationUtils
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
+import dev.fluidkey.theme.GlassRenderer
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
@@ -48,10 +55,20 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
     var overlay: PopupOverlay? = null
     var predictor: NextCharPredictor? = null
 
+    /** Shared glass painter (the service passes its own so panels and keys match). */
+    var renderer = GlassRenderer(resources.displayMetrics.density)
+        set(v) { field = v; v.theme = theme; staticDirty = true; invalidate() }
     var theme: KeyboardTheme = Themes.DARK
-        set(v) { field = v; invalidate() }
+        set(v) {
+            field = v
+            renderer.theme = v
+            staticDirty = true
+            invalidate()
+        }
     var keyBorders = true
+        set(v) { field = v; staticDirty = true; invalidate() }
     var showHints = true
+        set(v) { field = v; staticDirty = true; invalidate() }
     var showPreview = true
     var showHitMap = false
     var backspaceSwipe = true
@@ -63,16 +80,17 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
 
     /** Editor action shown on the enter key, already reduced to "none" when the field wants newlines. */
     var enterAction = EditorInfo.IME_ACTION_NONE
-        set(v) { field = v; invalidate() }
+        set(v) { if (field != v) { field = v; staticDirty = true; invalidate() } }
 
     var shiftState = ShiftState.OFF
-        set(v) { if (field != v) { field = v; invalidate() } }
+        set(v) { if (field != v) { field = v; staticDirty = true; invalidate() } }
 
     var layout: KeyboardLayout = Layouts.letters(false)
         set(v) {
             cancelAll()
             field = v
             hitMap = null
+            staticDirty = true
             requestLayout()
             if (width > 0 && height > 0) layoutKeys(width, height)
             invalidate()
@@ -84,7 +102,7 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
     private val padBottom = 6 * dp
     private val gapH = 5 * dp
     private val gapV = 9 * dp
-    private val radius = 8 * dp
+    private val radius = 10 * dp
     private val baseRowHeight get() = 56 * dp * heightScale
 
     private class LaidKey(val key: Key, val rect: RectF, val touch: RectF, val hit: HitKey)
@@ -95,9 +113,62 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
     private var unit = 1f
 
     private val keyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
-    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.RIGHT }
+    private val medium: Typeface =
+        if (Build.VERSION.SDK_INT >= 28) Typeface.create(Typeface.DEFAULT, 500, false) else Typeface.create("sans-serif-medium", Typeface.NORMAL)
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = medium
+    }
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.RIGHT
+        typeface = medium
+    }
     private val icons = HashMap<Int, Drawable>()
+
+    init {
+        renderer.theme = theme
+    }
+
+    // Static layer: every key at rest, drawn once into a bitmap (with soft shadows, which need
+    // a software canvas). Per frame we only blit it and draw the few keys that are animating.
+    private var staticLayer: Bitmap? = null
+    private var staticDirty = true
+
+    private class Anim(val from: Float, val to: Float, val start: Long, val dur: Long, val spring: Boolean) {
+        fun value(now: Long): Float {
+            val t = ((now - start).toFloat() / dur).coerceIn(0f, 1f)
+            val e = if (spring) SPRING.getInterpolation(t) else EASE.getInterpolation(t)
+            return from + (to - from) * e
+        }
+
+        fun done(now: Long) = now - start >= dur
+    }
+
+    private val anims = HashMap<LaidKey, Anim>()
+    private val live = ArrayList<LaidKey>()
+    private var seeking = false
+        set(v) { if (field != v) { field = v; invalidate() } }
+
+    private fun press(lk: LaidKey) {
+        pressed += lk
+        animate(lk, 1f, 70L, spring = false)
+    }
+
+    private fun unpress(lk: LaidKey) {
+        pressed -= lk
+        animate(lk, 0f, 170L, spring = true)
+    }
+
+    private fun animate(lk: LaidKey, to: Float, dur: Long, spring: Boolean) {
+        val now = AnimationUtils.currentAnimationTimeMillis()
+        val cur = anims[lk]?.value(now)?.coerceIn(0f, 1f) ?: 0f
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            if (to == 0f) anims.remove(lk) else anims[lk] = Anim(to, to, now, 1L, false)
+        } else {
+            anims[lk] = Anim(cur, to, now, dur, spring)
+        }
+        invalidate()
+    }
 
     // ---------------------------------------------------------------- layout
 
@@ -142,6 +213,8 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
             y += rh
         }
         hitMap = null
+        anims.clear()
+        staticDirty = true
     }
 
     // ---------------------------------------------------------------- drawing
@@ -171,60 +244,121 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
         else -> null
     }
 
-    override fun onDraw(canvas: Canvas) {
-        val adaptiveLayout = layout.kind == LayoutKind.LETTERS
-        val shifted = shiftState != ShiftState.OFF
-        val probs = if (showHitMap && adaptiveLayout) currentProbs() else null
+    private fun kindOf(k: Key): GlassRenderer.Kind = when {
+        k.style == KeyStyle.ACTION -> GlassRenderer.Kind.ACCENT
+        k.code == Codes.SHIFT && shiftState == ShiftState.LOCKED -> GlassRenderer.Kind.ACCENT
+        k.style == KeyStyle.MODIFIER -> GlassRenderer.Kind.MODIFIER
+        else -> GlassRenderer.Kind.GLASS
+    }
+
+    private fun ensureStatic() {
+        if (width <= 0 || height <= 0) return
+        var b = staticLayer
+        if (b == null || b.width != width || b.height != height) {
+            b = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            staticLayer = b
+            staticDirty = true
+        }
+        if (!staticDirty) return
+        b!!.eraseColor(0)
+        val c = Canvas(b)
+        // Shadows first so no shadow ever lies over a neighbouring key.
         for (lk in laid) {
-            val k = lk.key
-            val isPressed = lk in pressed
-            val capsLocked = k.code == Codes.SHIFT && shiftState == ShiftState.LOCKED
-            val accentKey = k.style == KeyStyle.ACTION || capsLocked
-            val bg = when {
-                isPressed -> theme.pressed
-                accentKey -> theme.accent
-                k.style == KeyStyle.MODIFIER -> theme.modifier
-                else -> theme.key
+            val kind = kindOf(lk.key)
+            if (keyBorders || kind == GlassRenderer.Kind.ACCENT) renderer.drawShadow(c, lk.rect, radius, kind)
+        }
+        for (lk in laid) drawKeyBody(c, lk, 0f)
+        staticDirty = false
+    }
+
+    private fun drawKeyBody(c: Canvas, lk: LaidKey, press: Float) {
+        val k = lk.key
+        val r = lk.rect
+        val kind = kindOf(k)
+        renderer.drawGlass(c, r, radius, kind, press, keyBorders)
+        val accent = kind == GlassRenderer.Kind.ACCENT
+        val fg = if (accent) theme.onAccent else theme.text
+        val shadowColor = if (accent) 0 else if (theme.isDark) 0x59000000 else 0x66FFFFFF
+        textPaint.setShadowLayer(1.2f * dp, 0f, 0.6f * dp, shadowColor)
+        val res = iconFor(k)
+        if (res != null) {
+            val s = (min(r.width(), r.height()) * 0.5f).toInt()
+            val d = icon(res, fg)
+            val l = (r.centerX() - s / 2f).toInt()
+            val t = (r.centerY() - s / 2f).toInt()
+            d.setBounds(l, t, l + s, t + s)
+            d.draw(c)
+        } else {
+            val shifted = shiftState != ShiftState.OFF
+            val isSpace = k.code == Codes.SPACE
+            val label = when {
+                isSpace && seeking && press > 0f -> "‹    ›"
+                isSpace -> spaceLabel
+                k.isLetter && shifted -> k.label.uppercase()
+                else -> k.label
             }
-            if (keyBorders || isPressed || accentKey) {
-                keyPaint.color = bg
-                canvas.drawRoundRect(lk.rect, radius, radius, keyPaint)
+            textPaint.color = if (isSpace) theme.hint else fg
+            textPaint.textSize = when {
+                isSpace -> r.height() * (if (seeking && press > 0f) 0.42f else 0.27f)
+                label.length == 1 -> min(r.height() * 0.44f, r.width() * 0.68f)
+                else -> r.height() * 0.29f
             }
-            val fg = if (accentKey && !isPressed) theme.onAccent else theme.text
-            val r = lk.rect
-            val res = iconFor(k)
-            if (res != null) {
-                val s = (min(r.width(), r.height()) * 0.52f).toInt()
-                val d = icon(res, fg)
-                val l = (r.centerX() - s / 2f).toInt()
-                val t = (r.centerY() - s / 2f).toInt()
-                d.setBounds(l, t, l + s, t + s)
-                d.draw(canvas)
+            c.drawText(label, r.centerX(), r.centerY() - (textPaint.descent() + textPaint.ascent()) / 2, textPaint)
+        }
+        textPaint.clearShadowLayer()
+        if (showHints && k.hint != null && layout.kind == LayoutKind.LETTERS) {
+            hintPaint.color = theme.hint
+            hintPaint.textSize = r.height() * 0.22f
+            c.drawText(k.hint, r.right - 5 * dp, r.top + 3.5f * dp + hintPaint.textSize, hintPaint)
+        }
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val now = AnimationUtils.currentAnimationTimeMillis()
+        ensureStatic()
+        live.clear()
+        live.addAll(anims.keys)
+        staticLayer?.let { bmp ->
+            if (live.isEmpty()) {
+                canvas.drawBitmap(bmp, 0f, 0f, null)
             } else {
-                val label = if (k.code == Codes.SPACE) spaceLabel else if (k.isLetter && shifted) k.label.uppercase() else k.label
-                textPaint.color = if (k.code == Codes.SPACE) theme.hint else fg
-                textPaint.textSize = when {
-                    k.code == Codes.SPACE -> r.height() * 0.28f
-                    label.length == 1 -> min(r.height() * 0.46f, r.width() * 0.7f)
-                    else -> r.height() * 0.3f
+                canvas.save()
+                // Clear the key and its resting shadow (which stays within the key gaps), so a
+                // pressed key reads as sunk into the glass.
+                for (lk in live) {
+                    val r = lk.rect
+                    canvas.clipOutRect(r.left - 2 * dp, r.top - 1 * dp, r.right + 2 * dp, r.bottom + 4.5f * dp)
                 }
-                canvas.drawText(label, r.centerX(), r.centerY() - (textPaint.descent() + textPaint.ascent()) / 2, textPaint)
-            }
-            if (showHints && k.hint != null && layout.kind == LayoutKind.LETTERS) {
-                hintPaint.color = theme.hint
-                hintPaint.textSize = r.height() * 0.24f
-                canvas.drawText(k.hint, r.right - 4 * dp, r.top + 3 * dp + hintPaint.textSize, hintPaint)
-            }
-            if (probs != null && k.isLetter) {
-                // Hit-map mode: a bar under each letter shows how likely it is next.
-                val p = probs[k.code - 'a'.code]
-                keyPaint.color = theme.accent
-                val bw = r.width() * 0.8f * sqrt(p.toDouble()).toFloat()
-                canvas.drawRoundRect(r.centerX() - bw / 2, r.bottom - 5 * dp, r.centerX() + bw / 2, r.bottom - 2 * dp, dp, dp, keyPaint)
+                canvas.drawBitmap(bmp, 0f, 0f, null)
+                canvas.restore()
             }
         }
-        // Drawn over the keys (translucent) so the moved key edges are visible.
-        if (showHitMap && adaptiveLayout) drawHitMap(canvas)
+        var running = false
+        for (lk in live) {
+            val a = anims[lk] ?: continue
+            val v = a.value(now)
+            // Pressed keys sink to 95.5% and brighten; release springs slightly past 1.
+            val scale = 1f - 0.045f * v
+            canvas.save()
+            canvas.scale(scale, scale, lk.rect.centerX(), lk.rect.centerY())
+            drawKeyBody(canvas, lk, v.coerceIn(0f, 1f))
+            canvas.restore()
+            if (!a.done(now)) running = true else if (a.to == 0f) anims.remove(lk)
+        }
+        if (showHitMap && layout.kind == LayoutKind.LETTERS) {
+            // Drawn over the keys (translucent) so the moved key edges are visible.
+            drawHitMap(canvas)
+            currentProbs()?.let { probs ->
+                keyPaint.color = theme.accent
+                for (lk in laid) {
+                    if (!lk.key.isLetter) continue
+                    val r = lk.rect
+                    val bw = r.width() * 0.8f * sqrt(probs[lk.key.code - 'a'.code].toDouble()).toFloat()
+                    canvas.drawRoundRect(r.centerX() - bw / 2, r.bottom - 5 * dp, r.centerX() + bw / 2, r.bottom - 2 * dp, dp, dp, keyPaint)
+                }
+            }
+        }
+        if (running) postInvalidateOnAnimation()
     }
 
     private var hitMap: Bitmap? = null
@@ -297,6 +431,8 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
+                // Typing must never turn into a scroll of an enclosing list (settings preview).
+                parent?.requestDisallowInterceptTouchEvent(true)
                 // Rollover: a new finger lands while another is still on a character key ->
                 // commit the earlier key now so fast two-thumb typing never drops letters.
                 for (p in ptrs.values) {
@@ -351,7 +487,7 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
         }
         if (lk.key.popup.isNotEmpty()) timer.postDelayed(p.longPress, longPressDelay)
         if (lk.key.code == Codes.SPACE) timer.postDelayed(p.longPress, max(longPressDelay, 450L))
-        pressed += lk
+        press(lk)
         showPreviewFor(p)
         invalidate()
     }
@@ -364,6 +500,7 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
             Mode.NORMAL -> when (p.lk.key.code) {
                 Codes.SPACE -> if (abs(x - p.downX) > slop * 1.5f) {
                     p.mode = Mode.SEEK
+                    seeking = true
                     timer.removeCallbacks(p.longPress)
                     p.seekAnchorX = x
                 }
@@ -401,10 +538,10 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
         val g = resolver.geometric(x, y, hitKeys) ?: return
         val nk = laid[g.id]
         if (nk === p.lk || !producesText(nk.key) || nk.key.code == Codes.SPACE) return
-        pressed -= p.lk
+        unpress(p.lk)
         p.lk = nk
         p.stolen = false
-        pressed += nk
+        press(nk)
         timer.removeCallbacks(p.longPress)
         if (nk.key.popup.isNotEmpty()) timer.postDelayed(p.longPress, longPressDelay)
         showPreviewFor(p)
@@ -450,7 +587,8 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
     }
 
     private fun release(p: Ptr) {
-        pressed -= p.lk
+        if (p.mode == Mode.SEEK) seeking = false
+        unpress(p.lk)
         if (previewOwner === p) {
             previewOwner = null
             timer.removeCallbacks(hidePreviewRunnable)
@@ -552,6 +690,9 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
         timer.postDelayed(p.repeat, if (wordMode) 140L else max(30L, 85L - p.repeatCount * 4L))
     }
 
+    /** A word was finished outside the IME service (settings preview): let the resolver learn. */
+    fun resolverCommitWord() = resolver.commitWord()
+
     /** Visual bounds of the first key with [code] (used by tests and tooling). */
     fun keyRect(code: Int): RectF? = laid.firstOrNull { it.key.code == code }?.rect?.let { RectF(it) }
 
@@ -563,6 +704,8 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
         }
         ptrs.clear()
         pressed.clear()
+        anims.clear()
+        seeking = false
         previewOwner = null
         overlay?.hideAll()
         invalidate()
@@ -571,5 +714,10 @@ class KeyboardView(context: Context, private val resolver: AdaptiveTouchResolver
     override fun onDetachedFromWindow() {
         cancelAll()
         super.onDetachedFromWindow()
+    }
+
+    companion object {
+        private val EASE = DecelerateInterpolator(1.6f)
+        private val SPRING = OvershootInterpolator(2.2f)
     }
 }

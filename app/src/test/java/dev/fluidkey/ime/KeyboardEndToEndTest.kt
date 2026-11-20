@@ -15,7 +15,6 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.EditText
-import androidx.preference.PreferenceManager
 import dev.fluidkey.clipboard.ClipboardPanel
 import dev.fluidkey.emoji.EmojiPanel
 import dev.fluidkey.keyboard.Codes
@@ -61,7 +60,7 @@ class KeyboardEndToEndTest {
 
     private fun start(prefs: Map<String, Any> = emptyMap()) {
         val ctx = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
-        val sp = PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear()
+        val sp = Dictionary.settings(ctx).edit().clear()
         prefs.forEach { (k, v) ->
             when (v) {
                 is Boolean -> sp.putBoolean(k, v)
@@ -271,5 +270,17 @@ class KeyboardEndToEndTest {
         start(mapOf("theme" to "dark"))
         tap(Codes.SYMBOLS)
         shot("symbols")
+        // A key mid-press: sunk, brightened, with its glass preview bubble.
+        start(mapOf("theme" to "ocean"))
+        val g = kv.keyRect('g'.code)!!
+        kv.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, g.centerX(), g.centerY()))
+        idle(50)
+        shot("pressed_key", settle = false)
+        kv.dispatchTouchEvent(event(MotionEvent.ACTION_UP, g.centerX(), g.centerY()))
+        idle(300)
+        for (theme in listOf("sunset", "rose")) {
+            start(mapOf("theme" to theme))
+            shot("theme_$theme")
+        }
     }
 }

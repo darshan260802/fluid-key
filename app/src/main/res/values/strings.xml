@@ -5,7 +5,6 @@
     <string name="clipboard">Clipboard</string>
     <string name="clipboard_empty">Text you copy shows up here. Tap an item to paste it.</string>
     <string name="clear_clipboard">Clear clipboard history</string>
-    <string name="clipboard_cleared">Clipboard history cleared (pinned items kept)</string>
     <string name="pin">Pin</string>
     <string name="delete">Delete</string>
     <string name="emoji">Emoji</string>
@@ -15,11 +14,4 @@
     <string name="one_handed">One-handed mode</string>
     <string name="full_width">Full width</string>
     <string name="switch_side">Switch side</string>
-    <string name="reset_done">Learned typing data reset</string>
-    <string name="status_disabled">Step 1: enable FluidKey in your keyboard settings.</string>
-    <string name="status_enabled">Step 2: switch to FluidKey as your keyboard.</string>
-    <string name="status_ready">FluidKey is your active keyboard. Try it below.</string>
-    <string name="enable">1 · Enable</string>
-    <string name="select">2 · Select</string>
-    <string name="try_hint">Type here to try FluidKey</string>
 </resources>

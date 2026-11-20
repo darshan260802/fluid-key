@@ -13,7 +13,9 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import dev.fluidkey.R
 import dev.fluidkey.ime.Ui
-import dev.fluidkey.theme.KeyboardTheme
+import android.view.View
+import android.widget.FrameLayout
+import dev.fluidkey.theme.GlassRenderer
 
 /** Emoji categories loaded from assets/emoji.txt (generated from Unicode emoji data). */
 object EmojiData {
@@ -49,7 +51,7 @@ object EmojiData {
 @SuppressLint("ViewConstructor")
 class EmojiPanel(
     context: Context,
-    private val theme: KeyboardTheme,
+    private val renderer: GlassRenderer,
     private val data: SharedPreferences,
     private val onEmoji: (String) -> Unit,
     private val onDelete: () -> Unit,
@@ -64,10 +66,11 @@ class EmojiPanel(
     private val grid = RecyclerView(context)
     private val layoutManager = GridLayoutManager(context, COLUMNS)
     private var selectedTab = -1
+    private val theme get() = renderer.theme
+    private val indicator = View(context)
 
     init {
         orientation = VERTICAL
-        setBackgroundColor(theme.background)
         layoutManager.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
             override fun getSpanSize(position: Int) = if (entries[position].header) COLUMNS else 1
         }
@@ -83,22 +86,31 @@ class EmojiPanel(
         })
         addView(grid, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
 
+        // Floating glass category bar: ABC · tabs (with a sliding accent indicator) · backspace.
         val bar = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            background = Ui.glass(context, renderer, 22f, insetDp = 4f)
+            val p = Ui.dp(context, 6f)
+            setPadding(p, 0, p, 0)
         }
-        bar.addView(Ui.textButton(context, theme, "ABC") { onClose() }, LayoutParams(LayoutParams.WRAP_CONTENT, Ui.dp(context, 44f)))
+        bar.addView(Ui.textButton(context, renderer, "ABC") { onClose() }, LayoutParams(LayoutParams.WRAP_CONTENT, Ui.dp(context, 44f)))
         val tabRow = LinearLayout(context).apply { orientation = HORIZONTAL }
+        val tabFrame = FrameLayout(context)
+        indicator.background = Ui.glass(context, renderer, 999f, GlassRenderer.Kind.ACCENT)
+        indicator.alpha = 0.9f
+        tabFrame.addView(indicator, FrameLayout.LayoutParams(Ui.dp(context, 38f), Ui.dp(context, 34f), Gravity.CENTER_VERTICAL))
+        tabFrame.addView(tabRow, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(context, 44f)))
         val tabScroll = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
-            addView(tabRow)
+            addView(tabFrame)
         }
         bar.addView(tabScroll, LayoutParams(0, Ui.dp(context, 44f), 1f))
         bar.addView(
-            Ui.iconButton(context, theme, R.drawable.ic_backspace, context.getString(R.string.delete)) { onDelete() },
-            LayoutParams(Ui.dp(context, 52f), Ui.dp(context, 44f)),
+            Ui.iconButton(context, renderer, R.drawable.ic_backspace, context.getString(R.string.delete)) { onDelete() },
+            LayoutParams(Ui.dp(context, 50f), Ui.dp(context, 46f)),
         )
-        addView(bar, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+        addView(bar, LayoutParams(LayoutParams.MATCH_PARENT, Ui.dp(context, 54f)))
 
         build(tabRow)
     }
@@ -117,13 +129,12 @@ class EmojiPanel(
             cat.emojis.forEach { entries += Entry(it, false) }
             val tab = TextView(context).apply {
                 text = cat.tab
-                textSize = 20f
+                textSize = 19f
                 gravity = Gravity.CENTER
-                background = Ui.ripple(theme)
                 setOnClickListener { layoutManager.scrollToPositionWithOffset(sectionStarts[i], 0); selectTab(i) }
             }
             tabViews += tab
-            tabRow.addView(tab, LayoutParams(Ui.dp(context, 46f), Ui.dp(context, 44f)))
+            tabRow.addView(tab, LayoutParams(Ui.dp(context, 44f), Ui.dp(context, 44f)))
         }
         // Start on smileys if there are no recents yet.
         val start = if (recents().isEmpty()) 1 else 0
@@ -135,9 +146,13 @@ class EmojiPanel(
         if (i == selectedTab) return
         selectedTab = i
         tabViews.forEachIndexed { idx, v ->
-            v.alpha = if (idx == i) 1f else 0.45f
-            v.background = if (idx == i) Ui.rounded(theme.modifier, Ui.dp(context, 10f).toFloat()) else Ui.ripple(theme)
+            v.animate().alpha(if (idx == i) 1f else 0.5f).scaleX(if (idx == i) 1.08f else 1f).scaleY(if (idx == i) 1.08f else 1f).setDuration(150).start()
         }
+        // Slide the accent pill under the active tab.
+        val tabW = Ui.dp(context, 44f)
+        val x = i * tabW + (tabW - Ui.dp(context, 38f)) / 2f
+        if (indicator.width == 0) indicator.translationX = x
+        else indicator.animate().translationX(x).setDuration(180).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
     }
 
     private fun pick(e: String) {
@@ -158,13 +173,15 @@ class EmojiPanel(
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val tv = TextView(parent.context)
             if (viewType == 0) {
-                tv.textSize = 12f
+                tv.textSize = 11f
+                tv.typeface = Ui.medium
+                tv.letterSpacing = 0.12f
                 tv.setTextColor(theme.hint)
-                val p = Ui.dp(context, 10f)
-                tv.setPadding(p, p, p, p / 2)
+                val p = Ui.dp(context, 12f)
+                tv.setPadding(p, p, p, p / 3)
                 tv.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             } else {
-                tv.textSize = 26f
+                tv.textSize = 27f
                 tv.gravity = Gravity.CENTER
                 tv.background = Ui.ripple(theme)
                 tv.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(context, 48f))

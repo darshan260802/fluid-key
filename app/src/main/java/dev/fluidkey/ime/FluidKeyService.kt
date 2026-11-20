@@ -20,13 +20,14 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.preference.PreferenceManager
 import dev.fluidkey.R
 import dev.fluidkey.clipboard.ClipboardPanel
 import dev.fluidkey.clipboard.ClipboardStore
@@ -38,6 +39,8 @@ import dev.fluidkey.keyboard.Layouts
 import dev.fluidkey.keyboard.PopupOverlay
 import dev.fluidkey.keyboard.ShiftState
 import dev.fluidkey.settings.SettingsActivity
+import dev.fluidkey.theme.BackdropDrawable
+import dev.fluidkey.theme.GlassRenderer
 import dev.fluidkey.theme.KeyboardTheme
 import dev.fluidkey.theme.Themes
 import dev.fluidkey.touch.AdaptiveTouchResolver
@@ -60,6 +63,9 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
     private var userWordsDirty = false
 
     private var theme: KeyboardTheme = Themes.DARK
+    private val renderer by lazy { GlassRenderer(resources.displayMetrics.density) }
+    private var clipButton: ImageView? = null
+    private var emojiButton: ImageView? = null
     private var keyboardView: KeyboardView? = null
     private var overlay: PopupOverlay? = null
     private var body: FrameLayout? = null
@@ -89,7 +95,7 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
 
     override fun onCreate() {
         super.onCreate()
-        sp = PreferenceManager.getDefaultSharedPreferences(this)
+        sp = Dictionary.settings(this)
         data = getSharedPreferences(DATA_PREFS, Context.MODE_PRIVATE)
         prefs = Prefs(sp)
         clipStore = ClipboardStore(data)
@@ -114,35 +120,13 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
     }
 
     private fun loadPredictor() {
-        val p = NextCharPredictor()
-        predictor = p
-        Thread {
-            try {
-                assets.open("words_en.txt").bufferedReader().useLines { lines ->
-                    lines.forEach { line ->
-                        val sp = line.indexOf(' ')
-                        if (sp > 0) p.addFrequency(line.substring(0, sp), line.substring(sp + 1).toLongOrNull() ?: 1L)
-                    }
-                }
-                val f = File(filesDir, USER_WORDS)
-                if (f.exists()) {
-                    val loaded = HashMap<String, Int>()
-                    f.forEachLine { line ->
-                        val parts = line.split(' ')
-                        val n = parts.getOrNull(1)?.toIntOrNull()
-                        if (parts.size == 2 && n != null) loaded[parts[0]] = n
-                    }
-                    loaded.forEach { (w, n) -> p.learn(w, n) }
-                    synchronized(userWords) { userWords.putAll(loaded) }
-                }
-            } catch (_: Exception) {
-            }
-            p.markReady()
+        predictor = Dictionary.loadAsync(this) { p, user ->
+            synchronized(userWords) { userWords.putAll(user) }
             keyboardView?.post {
-                keyboardView?.predictor = predictor
+                keyboardView?.predictor = p
                 keyboardView?.onContextChanged()
             }
-        }.apply { name = "FluidKey-dict"; priority = Thread.NORM_PRIORITY - 1 }.start()
+        }
     }
 
     private fun persist() {
@@ -151,7 +135,7 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
             userWordsDirty = false
             val snapshot = synchronized(userWords) { userWords.toMap() }
             try {
-                File(filesDir, USER_WORDS).writeText(snapshot.entries.joinToString("\n") { "${it.key} ${it.value}" })
+                File(filesDir, Dictionary.USER_WORDS).writeText(snapshot.entries.joinToString("\n") { "${it.key} ${it.value}" })
             } catch (_: Exception) {
             }
         }
@@ -163,7 +147,7 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
         if (key == "reset_learning_token") {
             resolver.reset()
             synchronized(userWords) { userWords.clear() }
-            File(filesDir, USER_WORDS).delete()
+            File(filesDir, Dictionary.USER_WORDS).delete()
             data.edit().remove(KEY_OFFSETS).apply()
             loadPredictor()
             return
@@ -184,6 +168,7 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
 
     override fun onCreateInputView(): View {
         theme = Themes.resolve(this, prefs.theme)
+        renderer.theme = theme
         hapticsOn = prefs.haptics
         soundOn = prefs.sound
         resolver.enabled = prefs.adaptive
@@ -192,13 +177,14 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
         emojiPanel = null
         clipPanel = null
 
-        val root = FrameLayout(this).apply { setBackgroundColor(theme.background) }
+        val root = FrameLayout(this).apply { background = BackdropDrawable(renderer) }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         column.addView(buildToolbar(), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 46f)))
 
         val kv = KeyboardView(this, resolver).apply {
             listener = this@FluidKeyService
             predictor = this@FluidKeyService.predictor
+            renderer = this@FluidKeyService.renderer
             theme = this@FluidKeyService.theme
             keyBorders = prefs.keyBorders
             showHints = prefs.showHints
@@ -251,10 +237,14 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
             gravity = Gravity.CENTER_VERTICAL
         }
         val size = Ui.dp(this, 46f)
-        bar.addView(Ui.iconButton(this, theme, R.drawable.ic_clipboard, getString(R.string.clipboard)) { toggleClipboard() }, LinearLayout.LayoutParams(size, size))
-        bar.addView(Ui.iconButton(this, theme, R.drawable.ic_emoji, getString(R.string.emoji)) { toggleEmoji() }, LinearLayout.LayoutParams(size, size))
+        bar.setPadding(Ui.dp(this, 3f), Ui.dp(this, 2f), Ui.dp(this, 3f), 0)
+        clipButton = Ui.iconButton(this, renderer, R.drawable.ic_clipboard, getString(R.string.clipboard)) { toggleClipboard() }
+        emojiButton = Ui.iconButton(this, renderer, R.drawable.ic_emoji, getString(R.string.emoji)) { toggleEmoji() }
+        bar.addView(clipButton, LinearLayout.LayoutParams(size, size))
+        bar.addView(emojiButton, LinearLayout.LayoutParams(size, size))
         val chip = TextView(this).apply {
             setTextColor(theme.text)
+            typeface = Ui.medium
             textSize = 13f
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
@@ -267,7 +257,7 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
             val s = Ui.dp(this@FluidKeyService, 16f)
             icon.setBounds(0, 0, s, s)
             setCompoundDrawablesRelative(icon, null, null, null)
-            background = Ui.rounded(theme.key, Ui.dp(this@FluidKeyService, 16f).toFloat())
+            background = Ui.glass(this@FluidKeyService, renderer, 999f)
             visibility = View.INVISIBLE
             setOnClickListener {
                 clipChipText?.let { commit(it) }
@@ -276,16 +266,16 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
         }
         clipChip = chip
         val chipWrap = FrameLayout(this)
-        chipWrap.addView(chip, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 32f), Gravity.CENTER))
+        chipWrap.addView(chip, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, 34f), Gravity.CENTER))
         bar.addView(chipWrap, LinearLayout.LayoutParams(0, size, 1f))
-        bar.addView(Ui.iconButton(this, theme, R.drawable.ic_one_hand, getString(R.string.one_handed)) {
+        bar.addView(Ui.iconButton(this, renderer, R.drawable.ic_one_hand, getString(R.string.one_handed)) {
             val next = when (prefs.oneHanded) { "off" -> "right"; else -> "off" }
             sp.edit().putString("one_handed", next).apply()
         }, LinearLayout.LayoutParams(size, size))
-        bar.addView(Ui.iconButton(this, theme, R.drawable.ic_tune, getString(R.string.settings)) {
+        bar.addView(Ui.iconButton(this, renderer, R.drawable.ic_tune, getString(R.string.settings)) {
             startActivity(Intent(this, SettingsActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }, LinearLayout.LayoutParams(size, size))
-        bar.addView(Ui.iconButton(this, theme, R.drawable.ic_keyboard_hide, getString(R.string.hide)) {
+        bar.addView(Ui.iconButton(this, renderer, R.drawable.ic_keyboard_hide, getString(R.string.hide)) {
             requestHideSelf(0)
         }, LinearLayout.LayoutParams(size, size))
         return bar
@@ -297,10 +287,10 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
             gravity = Gravity.CENTER
         }
         val s = Ui.dp(this, 48f)
-        col.addView(Ui.iconButton(this, theme, R.drawable.ic_fullscreen, getString(R.string.full_width)) {
+        col.addView(Ui.iconButton(this, renderer, R.drawable.ic_fullscreen, getString(R.string.full_width)) {
             sp.edit().putString("one_handed", "off").apply()
         }, LinearLayout.LayoutParams(s, s))
-        col.addView(Ui.iconButton(this, theme, if (moveTo == "left") R.drawable.ic_chevron_left else R.drawable.ic_chevron_right, getString(R.string.switch_side)) {
+        col.addView(Ui.iconButton(this, renderer, if (moveTo == "left") R.drawable.ic_chevron_left else R.drawable.ic_chevron_right, getString(R.string.switch_side)) {
             sp.edit().putString("one_handed", moveTo).apply()
         }, LinearLayout.LayoutParams(s, s))
         return col
@@ -308,40 +298,62 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
 
     private fun showPanel(panel: View) {
         val b = body ?: return
-        closePanels()
+        closePanels(animated = false)
         keyboardView?.cancelAll()
         // Panels take exactly the keyboard's height; MATCH_PARENT inside the wrap_content
         // IME frame would let a scrolling grid grow to the whole screen.
         val h = keyboardRow?.height?.takeIf { it > 0 } ?: keyboardView?.measuredHeight ?: Ui.dp(this, 260f)
-        keyboardRow?.visibility = View.INVISIBLE
         b.addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, h))
+        val lift = Ui.dp(this, 8f).toFloat()
+        panel.alpha = 0f
+        panel.translationY = lift
+        panel.animate().alpha(1f).translationY(0f).setDuration(PANEL_MS).setInterpolator(DecelerateInterpolator()).start()
+        keyboardRow?.animate()?.alpha(0f)?.setDuration(PANEL_MS / 2)?.withEndAction {
+            if (emojiPanel != null || clipPanel != null) keyboardRow?.visibility = View.INVISIBLE
+        }?.start()
     }
 
-    private fun closePanels() {
-        emojiPanel?.let { (it.parent as? ViewGroup)?.removeView(it) }
-        clipPanel?.let { (it.parent as? ViewGroup)?.removeView(it) }
+    private fun closePanels(animated: Boolean = true) {
+        val lift = Ui.dp(this, 8f).toFloat()
+        for (panel in listOfNotNull(emojiPanel, clipPanel)) {
+            if (animated) {
+                panel.animate().alpha(0f).translationY(lift).setDuration(PANEL_MS)
+                    .withEndAction { (panel.parent as? ViewGroup)?.removeView(panel) }.start()
+            } else {
+                panel.animate().cancel()
+                (panel.parent as? ViewGroup)?.removeView(panel)
+            }
+        }
         emojiPanel = null
         clipPanel = null
-        keyboardRow?.visibility = View.VISIBLE
+        clipButton?.let { Ui.setActive(it, renderer, false) }
+        emojiButton?.let { Ui.setActive(it, renderer, false) }
+        keyboardRow?.let { row ->
+            row.animate().cancel()
+            row.visibility = View.VISIBLE
+            if (animated) row.animate().alpha(1f).setDuration(PANEL_MS).start() else row.alpha = 1f
+        }
     }
 
     private fun toggleEmoji() {
         if (emojiPanel != null) { closePanels(); return }
-        val panel = EmojiPanel(this, theme, data,
+        val panel = EmojiPanel(this, renderer, data,
             onEmoji = { commit(it) },
             onDelete = { feedback(Codes.DELETE); handleDelete() },
             onClose = { closePanels() })
         showPanel(panel)
         emojiPanel = panel
+        emojiButton?.let { Ui.setActive(it, renderer, true) }
     }
 
     private fun toggleClipboard() {
         if (clipPanel != null) { closePanels(); return }
-        val panel = ClipboardPanel(this, theme, clipStore,
+        val panel = ClipboardPanel(this, renderer, clipStore,
             onPaste = { commit(it); closePanels() },
             onClose = { closePanels() })
         showPanel(panel)
         clipPanel = panel
+        clipButton?.let { Ui.setActive(it, renderer, true) }
         hideClipChip()
     }
 
@@ -383,7 +395,7 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         if (needsRebuild) rebuild()
-        closePanels()
+        closePanels(animated = false)
         selStart = info.initialSelStart
         selEnd = info.initialSelEnd
         kind = when (info.inputType and InputType.TYPE_MASK_CLASS) {
@@ -667,8 +679,8 @@ open class FluidKeyService : InputMethodService(), KeyboardView.Listener,
 
     companion object {
         const val DATA_PREFS = "fluidkey_data"
+        private const val PANEL_MS = 160L
         private const val KEY_OFFSETS = "touch_offsets"
-        private const val USER_WORDS = "user_words.txt"
 
         /** Index where the [words]-th word before the end of [text] starts. */
         fun wordStartBack(text: CharSequence, words: Int): Int {

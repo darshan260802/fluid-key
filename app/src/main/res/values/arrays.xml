@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="theme_entries">
+        <item>Follow system (light / dark)</item>
+        <item>Follow system (light / AMOLED black)</item>
+        <item>Material You (wallpaper colors)</item>
+        <item>Light</item>
+        <item>Dark</item>
+        <item>AMOLED black</item>
+        <item>Ocean</item>
+        <item>Forest</item>
+        <item>Sunset</item>
+        <item>Lavender</item>
+        <item>Rose</item>
+    </string-array>
+    <string-array name="theme_values">
+        <item>system</item>
+        <item>system_amoled</item>
+        <item>dynamic</item>
+        <item>light</item>
+        <item>dark</item>
+        <item>amoled</item>
+        <item>ocean</item>
+        <item>forest</item>
+        <item>sunset</item>
+        <item>lavender</item>
+        <item>rose</item>
+    </string-array>
+    <string-array name="one_handed_entries">
+        <item>Off</item>
+        <item>Left hand</item>
+        <item>Right hand</item>
+    </string-array>
+    <string-array name="one_handed_values">
+        <item>off</item>
+        <item>left</item>
+        <item>right</item>
+    </string-array>
+</resources>

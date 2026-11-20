@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory android:title="Fluid touch" app:iconSpaceReserved="false">
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="adaptive_targets"
+            android:summary="Invisibly grow the touch area of the letters you are most likely to type next, and shrink unlikely ones"
+            android:title="Adaptive hit targets"
+            app:iconSpaceReserved="false" />
+        <SeekBarPreference
+            android:defaultValue="50"
+            android:dependency="adaptive_targets"
+            android:key="adaptive_strength"
+            android:max="100"
+            android:summary="How strongly predictions bend key edges. 0 is a classic keyboard"
+            android:title="Prediction strength"
+            app:iconSpaceReserved="false"
+            app:min="0"
+            app:showSeekBarValue="true" />
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:dependency="adaptive_targets"
+            android:key="adaptive_learning"
+            android:summary="Learn where you actually aim for each key, and the words you use"
+            android:title="Learn my typing"
+            app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="show_hit_map"
+            android:summary="Tint the areas currently taken over by likely keys and show prediction bars"
+            android:title="Show hit map (debug)"
+            app:iconSpaceReserved="false" />
+        <Preference
+            android:key="reset_learning"
+            android:summary="Forget learned aim offsets and words"
+            android:title="Reset learned data"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Appearance" app:iconSpaceReserved="false">
+        <ListPreference
+            android:defaultValue="system"
+            android:entries="@array/theme_entries"
+            android:entryValues="@array/theme_values"
+            android:key="theme"
+            android:title="Theme"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="key_borders"
+            android:summary="Draw key backgrounds. Turn off for a borderless look"
+            android:title="Key borders"
+            app:iconSpaceReserved="false" />
+        <SeekBarPreference
+            android:defaultValue="100"
+            android:key="height_scale"
+            android:max="130"
+            android:summary="Keyboard height in percent"
+            android:title="Keyboard height"
+            app:iconSpaceReserved="false"
+            app:min="75"
+            app:seekBarIncrement="5"
+            app:showSeekBarValue="true" />
+        <ListPreference
+            android:defaultValue="off"
+            android:entries="@array/one_handed_entries"
+            android:entryValues="@array/one_handed_values"
+            android:key="one_handed"
+            android:title="One-handed mode"
+            app:iconSpaceReserved="false"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="number_row"
+            android:title="Number row"
+            app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="show_hints"
+            android:summary="Show the long-press symbol in the corner of each key"
+            android:title="Long-press hints"
+            app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="key_preview"
+            android:title="Popup on key press"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Typing" app:iconSpaceReserved="false">
+        <SeekBarPreference
+            android:defaultValue="300"
+            android:key="long_press_delay"
+            android:max="800"
+            android:summary="Milliseconds to hold a key for symbols and accents"
+            android:title="Long-press delay"
+            app:iconSpaceReserved="false"
+            app:min="100"
+            app:seekBarIncrement="25"
+            app:showSeekBarValue="true" />
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="auto_cap"
+            android:title="Auto-capitalization"
+            app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="double_space_period"
+            android:summary="Double-tap space to type a period and space"
+            android:title="Double-space period"
+            app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="haptics"
+            android:title="Vibrate on keypress"
+            app:iconSpaceReserved="false" />
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="sound"
+            android:title="Sound on keypress"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Gestures" app:iconSpaceReserved="false">
+        <SeekBarPreference
+            android:defaultValue="50"
+            android:key="space_seek_sensitivity"
+            android:max="100"
+            android:summary="Hold the space bar and slide to move the cursor"
+            android:title="Space bar cursor speed"
+            app:iconSpaceReserved="false"
+            app:min="0"
+            app:showSeekBarValue="true" />
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="backspace_swipe"
+            android:summary="Swipe left from backspace to select and delete whole words"
+            android:title="Backspace swipe"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="Clipboard" app:iconSpaceReserved="false">
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="clipboard_history"
+            android:summary="Remember copied text (sensitive clips like passwords are skipped)"
+            android:title="Clipboard history"
+            app:iconSpaceReserved="false" />
+        <Preference
+            android:key="clear_clipboard"
+            android:title="Clear clipboard history"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory android:title="About" app:iconSpaceReserved="false">
+        <Preference
+            android:key="version"
+            android:title="FluidKey version"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+</PreferenceScreen>

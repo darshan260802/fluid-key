@@ -1,8 +1,12 @@
-## FluidKey v1.0.0
+## FluidKey v1.0.1
+
+**Fix:** the keyboard no longer stretches to full screen height on real devices. The popup layer was claiming all the height the IME window allowed.
+
+---
 
 The first release of FluidKey: an Android keyboard with **iOS-style adaptive hit targets**. It predicts the next letter and quietly enlarges that letter's touch area, and anchored key cores keep every key reachable.
 
-**Install:** download `FluidKey-v1.0.0.apk`, open it on your phone, then open FluidKey and follow **1 · Enable** → **2 · Select**. Requires Android 8.0+.
+**Install:** download `FluidKey-v1.0.1.apk`, open it on your phone, then open FluidKey and follow **1 · Enable** → **2 · Select**. Requires Android 8.0+.
 
 ### Highlights
 - Adaptive hit targets: a Bayesian spatial and language model with anchored targets, on-device learning of your aim, adjustable strength, and a hit-map debug view

@@ -13,8 +13,8 @@ android {
         applicationId = "dev.fluidkey"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
     }
 
     // PUBLIC sideload key, committed on purpose so every build (local or CI) can ship

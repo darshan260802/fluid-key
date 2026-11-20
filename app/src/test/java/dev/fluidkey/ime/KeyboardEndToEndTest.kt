@@ -93,9 +93,12 @@ class KeyboardEndToEndTest {
         layoutRoot()
     }
 
+    private val screenH get() = (891 * root.resources.displayMetrics.density).toInt()
+
     private fun layoutRoot() {
         val w = (411 * root.resources.displayMetrics.density).toInt()
-        root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        // Same constraint the IME window applies: at most the screen height.
+        root.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(screenH, View.MeasureSpec.AT_MOST))
         root.layout(0, 0, root.measuredWidth, root.measuredHeight)
     }
 
@@ -143,6 +146,17 @@ class KeyboardEndToEndTest {
         root.draw(Canvas(bmp))
         val dir = File("build/screenshots").apply { mkdirs() }
         File(dir, "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    @Test
+    fun keyboardWrapsItsContentInsteadOfFillingTheScreen() {
+        for (prefs in listOf(emptyMap(), mapOf<String, Any>("number_row" to true, "height_scale" to 130))) {
+            start(prefs)
+            assertTrue("height ${root.height} of $screenH", root.height < screenH / 2)
+            tap(Codes.EMOJI)
+            layoutRoot()
+            assertTrue("emoji height ${root.height} of $screenH", root.height < screenH / 2)
+        }
     }
 
     @Test

@@ -20,7 +20,7 @@ stays reachable. → [How it works (with research references)](docs/ADAPTIVE_TOU
 
 ## Download
 
-Grab **`FluidKey-v1.0.0.apk`** from [Releases](../../releases/latest) or from
+Grab **`FluidKey-v1.0.1.apk`** from [Releases](../../releases/latest) or from
 [`release/`](release/) in this repo. Then:
 
 1. Open the APK on your phone and allow installs from that source.

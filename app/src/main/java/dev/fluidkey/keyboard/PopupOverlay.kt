@@ -35,6 +35,17 @@ class PopupOverlay(context: Context) : View(context) {
         isFocusable = false
     }
 
+    /**
+     * Never ask for height of our own. The IME window measures the input view with
+     * AT_MOST(screen height); a plain View would take all of it and stretch the keyboard
+     * to full screen. FrameLayout re-measures MATCH_PARENT children with the final
+     * EXACTLY height, so we still cover the whole input view.
+     */
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val h = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY) MeasureSpec.getSize(heightMeasureSpec) else 0
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), h)
+    }
+
     fun showPreview(r: RectF, label: String) {
         previewRect = r
         previewText = label
